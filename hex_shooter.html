@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BEAT HEX！ - 16進数シューティングゲーム</title>
+    <style>
+        /* ========== 全体のスタイル設定 ========== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Creepster&family=Monoton&display=swap');
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000000;
+            background-image: 
+                radial-gradient(ellipse at top, #1a0505 0%, #000000 50%),
+                repeating-linear-gradient(
+                    0deg,
+                    rgba(139, 0, 0, 0.03) 0px,
+                    transparent 1px,
+                    transparent 2px,
+                    rgba(139, 0, 0, 0.03) 3px
+                );
+            color: #8b0000;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* ストレンジャーシングス風の点滅効果 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(139, 0, 0, 0.03);
+            pointer-events: none;
+            animation: flicker 3s infinite;
+            z-index: 9999;
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            41.99% { opacity: 1; }
+            42% { opacity: 0.8; }
+            43% { opacity: 1; }
+            45.99% { opacity: 1; }
+            46% { opacity: 0.7; }
+            46.5% { opacity: 1; }
+        }
+
+        /* ========== メインコンテナ（スマホ対応）========== */
+        #game-container {
+            width: 100%;
+            max-width: 800px;
+            height: 100vh;
+            background: rgba(10, 0, 0, 0.9);
+            border: 3px solid #8b0000;
+            box-shadow: 
+                0 0 20px rgba(139, 0, 0, 0.8),
+                0 0 40px rgba(139, 0, 0, 0.5),
+                inset 0 0 100px rgba(139, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        @media (min-width: 768px) {
+            #game-container {
+                width: 800px;
+                height: 90vh;
+                max-height: 700px;
+                border-radius: 10px;
+            }
+        }
+
+        #game-container.flash-error {
+            border-color: #cd5c5c;
+            box-shadow: 
+                0 0 80px rgba(205, 92, 92, 1),
+                inset 0 0 100px rgba(205, 92, 92, 0.5);
+            animation: error-flash 0.5s;
+        }
+
+        @keyframes error-flash {
+            0%, 100% { 
+                filter: brightness(1);
+            }
+            50% { 
+                filter: brightness(1.5) contrast(1.2);
+            }
+        }
+
+        /* ========== タイトルとステータスバー ========== */
+        #header {
+            background: linear-gradient(180deg, #1a0000 0%, #0a0000 100%);
+            padding: 10px 15px;
+            border-bottom: 2px solid #8b0000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        @media (min-width: 768px) {
+            #header {
+                padding: 15px;
+            }
+        }
+
+        #title {
+            font-family: 'Monoton', cursive;
+            font-size: 16px;
+            font-weight: bold;
+            color: #cd5c5c;
+            text-shadow: 
+                0 0 10px #cd5c5c,
+                0 0 20px #cd5c5c,
+                0 0 30px #8b0000,
+                0 0 40px #8b0000;
+            letter-spacing: 3px;
+            animation: neon-flicker 4s infinite alternate;
+        }
+
+        @media (min-width: 768px) {
+            #title {
+                font-size: 20px;
+            }
+        }
+
+        @keyframes neon-flicker {
+            0%, 100% {
+                text-shadow: 
+                    0 0 10px #cd5c5c,
+                    0 0 20px #cd5c5c,
+                    0 0 30px #8b0000,
+                    0 0 40px #8b0000;
+            }
+            50% {
+                text-shadow: 
+                    0 0 5px #cd5c5c,
+                    0 0 10px #cd5c5c,
+                    0 0 15px #8b0000,
+                    0 0 20px #8b0000;
+            }
+        }
+
+        #status {
+            display: flex;
+            gap: 15px;
+            font-size: 14px;
+            flex-wrap: wrap;
+        }
+
+        @media (min-width: 768px) {
+            #status {
+                gap: 30px;
+                font-size: 16px;
+            }
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: #cd5c5c;
+        }
+
+        @media (min-width: 768px) {
+            .stat-item {
+                gap: 8px;
+            }
+        }
+
+        .stat-value {
+            color: #ffff00;
+            font-weight: bold;
+            text-shadow: 0 0 10px #ffff00;
+        }
+
+        /* ========== ゲームステージ（敵が動くエリア）========== */
+        #stage {
+            flex: 1;
+            position: relative;
+            background: 
+                radial-gradient(ellipse at center, rgba(50, 0, 0, 0.3) 0%, transparent 70%),
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(139, 0, 0, 0.03) 2px,
+                    rgba(139, 0, 0, 0.03) 4px
+                );
+            background-color: #000000;
+            overflow: hidden;
+        }
+
+        /* ========== 敵のスタイル ========== */
+        .enemy {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #330000, #1a0000);
+            border: 2px solid #cd5c5c;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #cd5c5c;
+            text-shadow: 
+                0 0 10px #cd5c5c,
+                0 0 20px #cd5c5c,
+                0 0 30px #8b0000;
+            box-shadow: 
+                0 0 20px rgba(205, 92, 92, 0.8),
+                inset 0 0 20px rgba(139, 0, 0, 0.3);
+            animation: enemy-pulse 1s infinite alternate;
+            transition: all 0.1s;
+        }
+
+        .enemy.shake {
+            animation: shake 0.5s, enemy-pulse 1s infinite alternate;
+            background: linear-gradient(135deg, #660000, #330000);
+            border-color: #cd5c5c;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+
+        @keyframes enemy-pulse {
+            from {
+                box-shadow: 
+                    0 0 20px rgba(205, 92, 92, 0.8),
+                    inset 0 0 20px rgba(139, 0, 0, 0.3);
+            }
+            to {
+                box-shadow: 
+                    0 0 40px rgba(205, 92, 92, 1),
+                    inset 0 0 30px rgba(139, 0, 0, 0.5);
+            }
+        }
+
+        /* ========== ヒント吹き出し ========== */
+        .hint-popup {
+            position: absolute;
+            background: rgba(50, 0, 0, 0.95);
+            border: 2px solid #cd5c5c;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #ffff00;
+            text-shadow: 0 0 10px #ffff00;
+            box-shadow: 0 0 30px rgba(205, 92, 92, 0.8);
+            pointer-events: none;
+            z-index: 100;
+            animation: popup-show 1s ease-out forwards;
+            white-space: nowrap;
+        }
+
+        @keyframes popup-show {
+            0% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            20% {
+                opacity: 1;
+                transform: scale(1.1);
+            }
+            80% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+        }
+
+        /* ========== 弾のスタイル ========== */
+        .bullet {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background: radial-gradient(circle, #ffff00, #ff8800);
+            border: 2px solid #ffff00;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: #000000;
+            box-shadow: 
+                0 0 20px rgba(255, 255, 0, 0.8),
+                0 0 40px rgba(255, 255, 0, 0.5);
+        }
+
+        /* ========== 爆発エフェクト ========== */
+        .explosion {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle, #cd5c5c, #8b0000, transparent);
+            border-radius: 50%;
+            animation: explode 0.5s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes explode {
+            from {
+                transform: scale(0);
+                opacity: 1;
+            }
+            to {
+                transform: scale(2.5);
+                opacity: 0;
+            }
+        }
+
+        /* ========== 入力表示ポッド（スマホ対応）========== */
+        #input-display {
+            background: rgba(20, 0, 0, 0.95);
+            padding: 15px;
+            border-top: 2px solid #8b0000;
+            text-align: center;
+            font-size: 16px;
+            color: #cd5c5c;
+        }
+
+        @media (min-width: 768px) {
+            #input-display {
+                padding: 20px;
+                font-size: 20px;
+            }
+        }
+
+        .input-label {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .keyboard-hint {
+            font-size: 11px;
+            color: rgba(139, 0, 0, 0.6);
+        }
+
+        @media (min-width: 768px) {
+            .keyboard-hint {
+                font-size: 14px;
+            }
+        }
+
+        #input-bits {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        @media (min-width: 768px) {
+            #input-bits {
+                gap: 15px;
+            }
+        }
+
+        .bit-slot {
+            width: 40px;
+            height: 50px;
+            background: rgba(50, 0, 0, 0.5);
+            border: 2px solid #8b0000;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffff00;
+            text-shadow: 0 0 10px #ffff00;
+            transition: all 0.2s;
+        }
+
+        @media (min-width: 768px) {
+            .bit-slot {
+                width: 50px;
+                height: 60px;
+                font-size: 32px;
+            }
+        }
+
+        .bit-slot.empty {
+            color: rgba(139, 0, 0, 0.3);
+        }
+
+        .bit-slot.filled {
+            background: rgba(100, 0, 0, 0.5);
+            border-color: #ffff00;
+            box-shadow: 0 0 20px rgba(255, 255, 0, 0.5);
+            animation: slot-fill 0.3s ease-out;
+        }
+
+        @keyframes slot-fill {
+            0% {
+                transform: scale(1.3);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        #hex-result {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #ffff00;
+            text-shadow: 0 0 10px #ffff00;
+            min-height: 25px;
+        }
+
+        @media (min-width: 768px) {
+            #hex-result {
+                font-size: 18px;
+            }
+        }
+
+        /* ========== 履歴フィードバック ========== */
+        #mistake-history {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #ff6666;
+            text-shadow: 0 0 5px #ff6666;
+            min-height: 20px;
+            opacity: 0.8;
+        }
+
+        @media (min-width: 768px) {
+            #mistake-history {
+                font-size: 14px;
+            }
+        }
+
+        /* ========== 操作ボタン（スマホ対応）========== */
+        #controls {
+            background: rgba(20, 0, 0, 0.95);
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            border-top: 2px solid #8b0000;
+        }
+
+        @media (min-width: 768px) {
+            #controls {
+                padding: 20px;
+                gap: 20px;
+            }
+        }
+
+        button {
+            font-family: 'Courier New', monospace;
+            font-size: 32px;
+            font-weight: bold;
+            padding: 25px 50px;
+            border: 3px solid;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @media (min-width: 768px) {
+            button {
+                font-size: 36px;
+                padding: 20px 40px;
+            }
+        }
+
+        #btn-0 {
+            background: linear-gradient(135deg, #330000, #1a0000);
+            color: #cd5c5c;
+            border-color: #8b0000;
+            box-shadow: 
+                0 5px 15px rgba(139, 0, 0, 0.5),
+                inset 0 0 20px rgba(139, 0, 0, 0.1);
+        }
+
+        #btn-0:hover, #btn-0:active {
+            background: linear-gradient(135deg, #550000, #330000);
+            box-shadow: 
+                0 5px 25px rgba(205, 92, 92, 0.8),
+                inset 0 0 30px rgba(139, 0, 0, 0.2);
+            transform: translateY(-2px);
+        }
+
+        #btn-1 {
+            background: linear-gradient(135deg, #330000, #1a0000);
+            color: #ffff00;
+            border-color: #ffff00;
+            box-shadow: 
+                0 5px 15px rgba(255, 255, 0, 0.5),
+                inset 0 0 20px rgba(255, 255, 0, 0.1);
+        }
+
+        #btn-1:hover, #btn-1:active {
+            background: linear-gradient(135deg, #550000, #330000);
+            box-shadow: 
+                0 5px 25px rgba(255, 255, 0, 0.8),
+                inset 0 0 30px rgba(255, 255, 0, 0.2);
+            transform: translateY(-2px);
+        }
+
+        #btn-reset {
+            background: linear-gradient(135deg, #1a0000, #000000);
+            color: #cd5c5c;
+            border-color: #660000;
+            font-size: 16px;
+            padding: 25px 35px;
+            box-shadow: 
+                0 5px 15px rgba(0, 0, 0, 0.8),
+                inset 0 0 20px rgba(139, 0, 0, 0.1);
+        }
+
+        @media (min-width: 768px) {
+            #btn-reset {
+                font-size: 18px;
+                padding: 20px 30px;
+            }
+        }
+
+        #btn-reset:hover, #btn-reset:active {
+            background: linear-gradient(135deg, #330000, #1a0000);
+            box-shadow: 
+                0 5px 25px rgba(139, 0, 0, 0.5),
+                inset 0 0 30px rgba(139, 0, 0, 0.2);
+            transform: translateY(-2px);
+        }
+
+        /* ========== ゲームオーバー画面 ========== */
+        #game-over {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 0, 0, 0.98);
+            border: 3px solid #8b0000;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 
+                0 0 50px rgba(139, 0, 0, 0.8),
+                0 0 100px rgba(139, 0, 0, 0.5);
+            z-index: 1000;
+            max-width: 90%;
+        }
+
+        @media (min-width: 768px) {
+            #game-over {
+                padding: 40px;
+            }
+        }
+
+        #game-over h2 {
+            font-size: 40px;
+            color: #cd5c5c;
+            text-shadow: 
+                0 0 20px #cd5c5c,
+                0 0 40px #8b0000;
+            margin-bottom: 20px;
+        }
+
+        @media (min-width: 768px) {
+            #game-over h2 {
+                font-size: 48px;
+            }
+        }
+
+        #game-over p {
+            font-size: 20px;
+            margin: 10px 0;
+            color: #ffff00;
+            text-shadow: 0 0 10px #ffff00;
+        }
+
+        @media (min-width: 768px) {
+            #game-over p {
+                font-size: 24px;
+            }
+        }
+
+        #btn-restart {
+            margin-top: 20px;
+            background: linear-gradient(135deg, #330000, #1a0000);
+            color: #cd5c5c;
+            border-color: #8b0000;
+            font-size: 20px;
+            padding: 15px 35px;
+            box-shadow: 
+                0 5px 20px rgba(139, 0, 0, 0.5),
+                inset 0 0 30px rgba(139, 0, 0, 0.1);
+        }
+
+        @media (min-width: 768px) {
+            #btn-restart {
+                font-size: 24px;
+                padding: 15px 40px;
+            }
+        }
+
+        #btn-restart:hover, #btn-restart:active {
+            background: linear-gradient(135deg, #550000, #330000);
+            box-shadow: 
+                0 5px 30px rgba(205, 92, 92, 0.8),
+                inset 0 0 50px rgba(139, 0, 0, 0.2);
+        }
+
+        /* ========== タイトル画面 ========== */
+        #title-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.98);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        @media (min-width: 768px) {
+            #title-screen {
+                gap: 30px;
+            }
+        }
+
+        #title-screen.hidden {
+            display: none;
+        }
+
+        .game-title {
+            font-family: 'Monoton', cursive;
+            font-size: 36px;
+            font-weight: bold;
+            color: #cd5c5c;
+            text-shadow: 
+                0 0 20px #cd5c5c,
+                0 0 40px #cd5c5c,
+                0 0 60px #8b0000,
+                0 0 80px #8b0000;
+            letter-spacing: 8px;
+            margin-bottom: 20px;
+            animation: title-glow 3s ease-in-out infinite alternate;
+            text-align: center;
+        }
+
+        @media (min-width: 768px) {
+            .game-title {
+                font-size: 56px;
+            }
+        }
+
+        @keyframes title-glow {
+            0%, 100% {
+                text-shadow: 
+                    0 0 20px #cd5c5c,
+                    0 0 40px #cd5c5c,
+                    0 0 60px #8b0000,
+                    0 0 80px #8b0000;
+            }
+            50% {
+                text-shadow: 
+                    0 0 10px #cd5c5c,
+                    0 0 20px #cd5c5c,
+                    0 0 30px #8b0000,
+                    0 0 40px #8b0000;
+            }
+        }
+
+        .high-score-display {
+            font-size: 20px;
+            color: #ffff00;
+            text-shadow: 0 0 15px #ffff00;
+            margin-bottom: 30px;
+        }
+
+        @media (min-width: 768px) {
+            .high-score-display {
+                font-size: 24px;
+                margin-bottom: 40px;
+            }
+        }
+
+        .difficulty-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        @media (min-width: 768px) {
+            .difficulty-buttons {
+                gap: 20px;
+            }
+        }
+
+        .diff-btn {
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            font-weight: bold;
+            padding: 20px 40px;
+            border: 3px solid;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+            min-width: 180px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @media (min-width: 768px) {
+            .diff-btn {
+                font-size: 28px;
+                padding: 20px 50px;
+                min-width: 200px;
+            }
+        }
+
+        .diff-btn-easy {
+            background: linear-gradient(135deg, #003300, #001a00);
+            color: #00ff00;
+            border-color: #00ff00;
+            box-shadow: 
+                0 5px 20px rgba(0, 255, 0, 0.5),
+                inset 0 0 30px rgba(0, 255, 0, 0.1);
+        }
+
+        .diff-btn-easy:hover, .diff-btn-easy:active {
+            background: linear-gradient(135deg, #005500, #003300);
+            box-shadow: 
+                0 5px 30px rgba(0, 255, 0, 0.8),
+                inset 0 0 50px rgba(0, 255, 0, 0.2);
+            transform: translateY(-3px);
+        }
+
+        .diff-btn-normal {
+            background: linear-gradient(135deg, #332200, #1a1100);
+            color: #ffaa00;
+            border-color: #ffaa00;
+            box-shadow: 
+                0 5px 20px rgba(255, 170, 0, 0.5),
+                inset 0 0 30px rgba(255, 170, 0, 0.1);
+        }
+
+        .diff-btn-normal:hover, .diff-btn-normal:active {
+            background: linear-gradient(135deg, #553300, #332200);
+            box-shadow: 
+                0 5px 30px rgba(255, 170, 0, 0.8),
+                inset 0 0 50px rgba(255, 170, 0, 0.2);
+            transform: translateY(-3px);
+        }
+
+        .diff-btn-hard {
+            background: linear-gradient(135deg, #330000, #1a0000);
+            color: #cd5c5c;
+            border-color: #8b0000;
+            box-shadow: 
+                0 5px 20px rgba(139, 0, 0, 0.5),
+                inset 0 0 30px rgba(139, 0, 0, 0.1);
+        }
+
+        .diff-btn-hard:hover, .diff-btn-hard:active {
+            background: linear-gradient(135deg, #550000, #330000);
+            box-shadow: 
+                0 5px 30px rgba(205, 92, 92, 0.8),
+                inset 0 0 50px rgba(139, 0, 0, 0.2);
+            transform: translateY(-3px);
+        }
+
+        .difficulty-info {
+            font-size: 11px;
+            margin-top: 5px;
+            opacity: 0.8;
+            color: #cd5c5c;
+        }
+
+        @media (min-width: 768px) {
+            .difficulty-info {
+                font-size: 14px;
+            }
+        }
+
+        /* ========== 難易度表示 ========== */
+        .difficulty-label {
+            font-size: 12px;
+            color: #ffaa00;
+            text-shadow: 0 0 10px #ffaa00;
+        }
+
+        @media (min-width: 768px) {
+            .difficulty-label {
+                font-size: 14px;
+            }
+        }
+
+        /* ========== 新記録表示 ========== */
+        .new-record {
+            color: #ffff00;
+            font-size: 24px;
+            text-shadow: 
+                0 0 20px #ffff00,
+                0 0 40px #ffff00;
+            animation: record-flash 1s ease-in-out infinite;
+        }
+
+        @media (min-width: 768px) {
+            .new-record {
+                font-size: 28px;
+            }
+        }
+
+        @keyframes record-flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- ========== タイトル画面 ========== -->
+        <div id="title-screen">
+            <div class="game-title">★ BEAT HEX！ ★</div>
+            <div class="high-score-display">
+                HIGH SCORE: <span id="high-score-value">0</span>
+            </div>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="font-size: 18px; color: #00ffff; margin-bottom: 10px;">
+                    Select Difficulty
+                </div>
+            </div>
+            <div class="difficulty-buttons">
+                <div>
+                    <button class="diff-btn diff-btn-easy" onclick="startGame('easy')">
+                        EASY
+                    </button>
+                    <div class="difficulty-info">速度: ゆっくり | 間隔: 3.0秒</div>
+                </div>
+                <div>
+                    <button class="diff-btn diff-btn-normal" onclick="startGame('normal')">
+                        NORMAL
+                    </button>
+                    <div class="difficulty-info">速度: 標準 | 間隔: 1.8秒</div>
+                </div>
+                <div>
+                    <button class="diff-btn diff-btn-hard" onclick="startGame('hard')">
+                        HARD
+                    </button>
+                    <div class="difficulty-info">速度: 速い | 間隔: 0.8秒</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ヘッダー（タイトルとステータス）========== -->
+        <div id="header">
+            <div id="title">★ BEAT HEX！ ★</div>
+            <div id="status">
+                <div class="stat-item">
+                    <span>SCORE:</span>
+                    <span class="stat-value" id="score">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>LIFE:</span>
+                    <span class="stat-value" id="life">3</span>
+                </div>
+                <div class="stat-item difficulty-label">
+                    <span id="difficulty-display">NORMAL</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ゲームステージ ========== -->
+        <div id="stage"></div>
+
+        <!-- ========== 入力表示ポッド ========== -->
+        <div id="input-display">
+            <div class="input-label">
+                <span>Binary Input:</span>
+                <span class="keyboard-hint">(Press 0/1 or F/J keys)</span>
+            </div>
+            <div id="input-bits">
+                <div class="bit-slot empty">_</div>
+                <div class="bit-slot empty">_</div>
+                <div class="bit-slot empty">_</div>
+                <div class="bit-slot empty">_</div>
+            </div>
+            <div id="hex-result"></div>
+            <div id="mistake-history"></div>
+        </div>
+
+        <!-- ========== 操作ボタン ========== -->
+        <div id="controls">
+            <button id="btn-0" onclick="pushBit('0')">0</button>
+            <button id="btn-1" onclick="pushBit('1')">1</button>
+            <button id="btn-reset" onclick="restartGame()">RESTART</button>
+        </div>
+
+        <!-- ========== ゲームオーバー画面 ========== -->
+        <div id="game-over">
+            <h2>GAME OVER</h2>
+            <p id="new-record-text" class="new-record" style="display: none;">🎉 NEW RECORD! 🎉</p>
+            <p>Score: <span id="final-score">0</span></p>
+            <p>High Score: <span id="final-high-score">0</span></p>
+            <button id="btn-restart" onclick="showTitleScreen()">BACK TO TITLE</button>
+        </div>
+    </div>
+
+    <script>
+        // ========================================
+        // グローバル変数の定義
+        // ========================================
+        
+        // 16進数と2進数の対応表（変換テーブル）
+        const hexToBinary = {
+            '0': '0000', '1': '0001', '2': '0010', '3': '0011',
+            '4': '0100', '5': '0101', '6': '0110', '7': '0111',
+            '8': '1000', '9': '1001', 'A': '1010', 'B': '1011',
+            'C': '1100', 'D': '1101', 'E': '1110', 'F': '1111'
+        };
+        
+        // 2進数から16進数への逆引きテーブル
+        const binaryToHex = {
+            '0000': '0', '0001': '1', '0010': '2', '0011': '3',
+            '0100': '4', '0101': '5', '0110': '6', '0111': '7',
+            '1000': '8', '1001': '9', '1010': 'A', '1011': 'B',
+            '1100': 'C', '1101': 'D', '1110': 'E', '1111': 'F'
+        };
+
+        // 難易度設定
+        const DIFFICULTY_SETTINGS = {
+            easy: {
+                speed: 0.5,           // 移動速度（ゆっくり）
+                spawnInterval: 3000,  // 出現間隔（3.0秒）
+                speedIncrement: 0.05, // 速度上昇率
+                maxSpeed: 2.0,        // 最大速度
+                displayName: 'EASY'
+            },
+            normal: {
+                speed: 1.2,           // 移動速度（標準）
+                spawnInterval: 1800,  // 出現間隔（1.8秒）
+                speedIncrement: 0.1,  // 速度上昇率
+                maxSpeed: 3.5,        // 最大速度
+                displayName: 'NORMAL'
+            },
+            hard: {
+                speed: 2.5,           // 移動速度（速い）
+                spawnInterval: 800,   // 出現間隔（0.8秒）
+                speedIncrement: 0.15, // 速度上昇率
+                maxSpeed: 5.0,        // 最大速度
+                displayName: 'HARD'
+            }
+        };
+
+        // ゲーム状態の管理
+        let gameState = {
+            score: 0,           // スコア
+            life: 3,            // ライフ
+            currentInput: '',   // 現在入力中の2進数（最大4桁）
+            enemies: [],        // 画面上の敵の配列
+            bullets: [],        // 画面上の弾の配列
+            isGameOver: false,  // ゲームオーバーフラグ
+            difficulty: 'normal', // 現在の難易度
+            highScore: 0        // ハイスコア
+        };
+
+        // ハイスコアの読み込み
+        function loadHighScore() {
+            const saved = localStorage.getItem('beatHex_highScore');
+            gameState.highScore = saved ? parseInt(saved) : 0;
+            return gameState.highScore;
+        }
+
+        // ハイスコアの保存
+        function saveHighScore(score) {
+            if (score > gameState.highScore) {
+                gameState.highScore = score;
+                localStorage.setItem('beatHex_highScore', score);
+                return true; // 新記録
+            }
+            return false;
+        }
+
+        // ゲームループ用の変数
+        let gameLoopId;
+        let enemySpawnTimer = 0;
+        let gameStartTime = 0;              // ゲーム開始時刻
+        let currentDifficultySettings = DIFFICULTY_SETTINGS.normal; // 現在の難易度設定
+        const BULLET_SPEED = 8;             // 弾の移動速度（ピクセル/フレーム）- 速くして確実に届くように
+
+        // DOM要素の取得
+        const stage = document.getElementById('stage');
+        const scoreDisplay = document.getElementById('score');
+        const lifeDisplay = document.getElementById('life');
+        const inputBits = document.querySelectorAll('.bit-slot');
+        const hexResult = document.getElementById('hex-result');
+        const mistakeHistory = document.getElementById('mistake-history');
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const finalHighScoreDisplay = document.getElementById('final-high-score');
+        const newRecordText = document.getElementById('new-record-text');
+        const gameContainer = document.getElementById('game-container');
+        const titleScreen = document.getElementById('title-screen');
+        const highScoreValue = document.getElementById('high-score-value');
+        const difficultyDisplay = document.getElementById('difficulty-display');
+
+        // ========================================
+        // 初期化処理（難易度選択対応）
+        // ========================================
+        function init(difficulty = 'normal') {
+            // 難易度設定を適用
+            currentDifficultySettings = DIFFICULTY_SETTINGS[difficulty];
+            
+            gameState = {
+                score: 0,
+                life: 3,
+                currentInput: '',
+                enemies: [],
+                bullets: [],
+                isGameOver: false,
+                difficulty: difficulty,
+                highScore: loadHighScore()
+            };
+            
+            updateDisplay();
+            gameOverScreen.style.display = 'none';
+            
+            // 既存の敵と弾を削除
+            document.querySelectorAll('.enemy, .bullet, .explosion').forEach(el => el.remove());
+            
+            // ゲーム開始時刻を記録
+            gameStartTime = Date.now();
+            
+            // ゲームループを開始
+            enemySpawnTimer = Date.now();
+            gameLoop();
+        }
+
+        // ========================================
+        // タイトル画面を表示
+        // ========================================
+        function showTitleScreen() {
+            // ゲームループを停止
+            if (gameLoopId) {
+                cancelAnimationFrame(gameLoopId);
+            }
+            
+            // ハイスコアを更新
+            highScoreValue.textContent = loadHighScore();
+            
+            // タイトル画面を表示
+            titleScreen.classList.remove('hidden');
+            gameOverScreen.style.display = 'none';
+        }
+
+        // ========================================
+        // ゲーム開始（難易度選択）
+        // ========================================
+        function startGame(difficulty) {
+            // タイトル画面を非表示
+            titleScreen.classList.add('hidden');
+            
+            // ゲームを初期化して開始
+            init(difficulty);
+        }
+
+        // ========================================
+        // ゲームメインループ
+        // ========================================
+        function gameLoop() {
+            if (gameState.isGameOver) return;
+
+            // 敵の出現処理（難易度に応じた間隔）
+            if (Date.now() - enemySpawnTimer > currentDifficultySettings.spawnInterval) {
+                spawnEnemy();
+                enemySpawnTimer = Date.now();
+            }
+
+            // 敵の移動処理
+            updateEnemies();
+
+            // 弾の移動処理
+            updateBullets();
+
+            // 衝突判定
+            checkCollisions();
+
+            // 次のフレームを予約
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // ========================================
+        // 現在の敵の速度を計算（時間経過で速くなる）
+        // ========================================
+        function getCurrentEnemySpeed() {
+            // ゲーム開始からの経過時間（秒）
+            const elapsedSeconds = (Date.now() - gameStartTime) / 1000;
+            
+            // 10秒ごとに速度が上がる
+            const speedMultiplier = Math.floor(elapsedSeconds / 10);
+            
+            // 基本速度 + (10秒ごとの加算速度 × 経過した10秒の回数)
+            const currentSpeed = currentDifficultySettings.speed + 
+                                (currentDifficultySettings.speedIncrement * speedMultiplier);
+            
+            // 最大速度を制限
+            return Math.min(currentSpeed, currentDifficultySettings.maxSpeed);
+        }
+
+        // ========================================
+        // 敵の生成
+        // ========================================
+        function spawnEnemy() {
+            // ランダムに16進数の文字を選択（0〜F）
+            const hexChars = Object.keys(hexToBinary);
+            const randomHex = hexChars[Math.floor(Math.random() * hexChars.length)];
+            
+            // ステージの幅を取得してランダムなX座標を決定
+            const stageWidth = stage.offsetWidth;
+            const randomX = Math.random() * (stageWidth - 50); // 敵の幅50pxを考慮
+
+            // 敵オブジェクトを作成
+            const enemy = {
+                hex: randomHex,
+                x: randomX,
+                y: -50, // 画面上部の外側から開始
+                element: null
+            };
+
+            // DOM要素を作成
+            const enemyDiv = document.createElement('div');
+            enemyDiv.className = 'enemy';
+            enemyDiv.textContent = randomHex;
+            enemyDiv.style.left = enemy.x + 'px';
+            enemyDiv.style.top = enemy.y + 'px';
+            
+            enemy.element = enemyDiv;
+            stage.appendChild(enemyDiv);
+            
+            // 敵の配列に追加
+            gameState.enemies.push(enemy);
+        }
+
+        // ========================================
+        // 敵の移動と削除
+        // ========================================
+        function updateEnemies() {
+            const stageHeight = stage.offsetHeight;
+            
+            // 現在の敵の速度を取得（時間経過で速くなる）
+            const currentSpeed = getCurrentEnemySpeed();
+            
+            for (let i = gameState.enemies.length - 1; i >= 0; i--) {
+                const enemy = gameState.enemies[i];
+                
+                // 敵を下に移動（速度は時間経過で変化）
+                enemy.y += currentSpeed;
+                enemy.element.style.top = enemy.y + 'px';
+                
+                // 画面下部を超えた場合
+                if (enemy.y > stageHeight) {
+                    // ライフを減らす
+                    gameState.life--;
+                    updateDisplay();
+                    
+                    // 敵を削除
+                    enemy.element.remove();
+                    gameState.enemies.splice(i, 1);
+                    
+                    // ライフが0になったらゲームオーバー
+                    if (gameState.life <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+        }
+
+        // ========================================
+        // 弾の移動と削除
+        // ========================================
+        function updateBullets() {
+            const stageWidth = stage.offsetWidth;
+            const stageHeight = stage.offsetHeight;
+            
+            for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.bullets[i];
+                
+                // 方向ベクトルに従って移動（ターゲットに向かって飛ぶ）
+                bullet.x += bullet.dirX * BULLET_SPEED;
+                bullet.y += bullet.dirY * BULLET_SPEED;
+                
+                bullet.element.style.left = bullet.x + 'px';
+                bullet.element.style.top = bullet.y + 'px';
+                
+                // 画面外に出たら削除
+                if (bullet.y < -30 || bullet.y > stageHeight + 30 || 
+                    bullet.x < -30 || bullet.x > stageWidth + 30) {
+                    bullet.element.remove();
+                    gameState.bullets.splice(i, 1);
+                }
+            }
+        }
+
+        // ========================================
+        // 衝突判定
+        // ========================================
+        function checkCollisions() {
+            // 各弾について
+            for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.bullets[i];
+                
+                // 弾の中心座標
+                const bulletCenterX = bullet.x + 15;
+                const bulletCenterY = bullet.y + 15;
+                
+                // 各敵について
+                for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+                    const enemy = gameState.enemies[j];
+                    
+                    // 弾と敵の16進数が一致するかチェック
+                    if (bullet.hex === enemy.hex) {
+                        // 敵の中心座標
+                        const enemyCenterX = enemy.x + 25;
+                        const enemyCenterY = enemy.y + 25;
+                        
+                        // 距離による衝突判定
+                        const dx = bulletCenterX - enemyCenterX;
+                        const dy = bulletCenterY - enemyCenterY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < 35) { // 衝突（判定範囲を広げて当たりやすく）
+                            // 爆発エフェクトを表示
+                            createExplosion(enemyCenterX, enemyCenterY);
+                            
+                            // スコア加算（100点）
+                            gameState.score += 100;
+                            updateDisplay();
+                            
+                            // 弾と敵を削除
+                            bullet.element.remove();
+                            gameState.bullets.splice(i, 1);
+                            
+                            enemy.element.remove();
+                            gameState.enemies.splice(j, 1);
+                            
+                            break; // この弾の判定は終了
+                        }
+                    }
+                }
+            }
+        }
+
+        // ========================================
+        // 爆発エフェクトの作成
+        // ========================================
+        function createExplosion(x, y) {
+            const explosion = document.createElement('div');
+            explosion.className = 'explosion';
+            explosion.style.left = (x - 30) + 'px';
+            explosion.style.top = (y - 30) + 'px';
+            stage.appendChild(explosion);
+            
+            // アニメーション終了後に削除
+            setTimeout(() => explosion.remove(), 500);
+        }
+
+        // ========================================
+        // ボタン入力処理：0または1を追加
+        // ========================================
+        function pushBit(bit) {
+            if (gameState.isGameOver) return;
+            
+            // すでに4桁入力されている場合は何もしない
+            if (gameState.currentInput.length >= 4) return;
+            
+            // 入力に追加
+            gameState.currentInput += bit;
+            
+            // 表示を更新
+            updateInputDisplay();
+            
+            // 4桁になったら発射処理
+            if (gameState.currentInput.length === 4) {
+                fireBullet();
+            }
+        }
+
+        // ========================================
+        // リセットボタン：入力をクリア
+        // ========================================
+        function resetInput() {
+            if (gameState.isGameOver) return;
+            
+            gameState.currentInput = '';
+            updateInputDisplay();
+            
+            // 履歴表示もクリア
+            if (mistakeHistory) {
+                mistakeHistory.textContent = '';
+            }
+            
+            // エラー表示もクリア
+            if (hexResult) {
+                hexResult.textContent = '';
+            }
+        }
+
+        // ========================================
+        // 入力表示の更新（スロット型アニメーション）
+        // ========================================
+        function updateInputDisplay() {
+            // 各ビットスロットに表示
+            for (let i = 0; i < 4; i++) {
+                if (i < gameState.currentInput.length) {
+                    inputBits[i].textContent = gameState.currentInput[i];
+                    inputBits[i].classList.remove('empty');
+                    inputBits[i].classList.add('filled');
+                } else {
+                    inputBits[i].textContent = '_';
+                    inputBits[i].classList.add('empty');
+                    inputBits[i].classList.remove('filled');
+                }
+            }
+            
+            // 4桁入力されている場合、16進数変換結果を表示
+            if (gameState.currentInput.length === 4) {
+                const hexValue = binaryToHex[gameState.currentInput];
+                hexResult.textContent = `→ HEX: ${hexValue}`;
+            } else {
+                hexResult.textContent = '';
+            }
+        }
+
+        // ========================================
+        // 弾の発射
+        // ========================================
+        function fireBullet() {
+            // 2進数を16進数に変換
+            const hexValue = binaryToHex[gameState.currentInput];
+            
+            if (!hexValue) {
+                // 変換失敗（通常はありえない）
+                resetInput();
+                return;
+            }
+            
+            // 画面上にある同じ16進数の敵を探す
+            const targetEnemy = gameState.enemies.find(enemy => enemy.hex === hexValue);
+            
+            if (!targetEnemy) {
+                // 対応する敵がいない場合 - ヒント表示
+                showMissHint(hexValue, gameState.currentInput);
+                return;
+            }
+            
+            // 弾の初期位置（画面下部中央）
+            const stageWidth = stage.offsetWidth;
+            const stageHeight = stage.offsetHeight;
+            const startX = stageWidth / 2 - 15;
+            const startY = stageHeight - 50;
+            
+            // ターゲットの中心座標
+            const targetX = targetEnemy.x + 25;
+            const targetY = targetEnemy.y + 25;
+            
+            // 弾からターゲットへの方向ベクトルを計算
+            const dx = targetX - startX;
+            const dy = targetY - startY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // 正規化した方向ベクトル（単位ベクトル）
+            const dirX = dx / distance;
+            const dirY = dy / distance;
+            
+            // 弾オブジェクトを作成
+            const bullet = {
+                hex: hexValue,
+                x: startX,
+                y: startY,
+                dirX: dirX,  // X方向の移動量
+                dirY: dirY,  // Y方向の移動量
+                targetEnemy: targetEnemy,  // ターゲットを記憶
+                element: null
+            };
+            
+            // DOM要素を作成
+            const bulletDiv = document.createElement('div');
+            bulletDiv.className = 'bullet';
+            bulletDiv.textContent = hexValue;
+            bulletDiv.style.left = bullet.x + 'px';
+            bulletDiv.style.top = bullet.y + 'px';
+            
+            bullet.element = bulletDiv;
+            stage.appendChild(bulletDiv);
+            
+            // 弾の配列に追加
+            gameState.bullets.push(bullet);
+            
+            // 入力をリセット
+            setTimeout(() => resetInput(), 300);
+        }
+
+        // ========================================
+        // ミス時のヒント表示（3つの演出）
+        // ========================================
+        function showMissHint(inputHex, inputBinary) {
+            // 1. 画面全体のフラッシュ
+            gameContainer.classList.add('flash-error');
+            setTimeout(() => gameContainer.classList.remove('flash-error'), 500);
+            
+            // 2. 履歴フィードバック（どの敵を狙うべきだったかリスト表示）
+            const availableEnemies = gameState.enemies.map(e => e.hex).join(', ');
+            mistakeHistory.textContent = `❌ No target "${inputHex}" | Available: ${availableEnemies || 'None'}`;
+            
+            // 3. 入力スロットを正解に一瞬変えてから消す演出
+            setTimeout(() => {
+                // 各スロットを赤くする
+                inputBits.forEach(slot => {
+                    slot.style.background = 'rgba(255, 0, 0, 0.3)';
+                    slot.style.borderColor = '#ff0000';
+                });
+            }, 100);
+            
+            // 500ms後に元に戻してリセット
+            setTimeout(() => {
+                inputBits.forEach(slot => {
+                    slot.style.background = '';
+                    slot.style.borderColor = '';
+                });
+                resetInput();
+            }, 600);
+        }
+
+        // ========================================
+        // 敵に正解のヒントポップアップを表示
+        // ========================================
+        function showEnemyHint(enemy) {
+            // 吹き出しを作成
+            const hintPopup = document.createElement('div');
+            hintPopup.className = 'hint-popup';
+            const correctBinary = hexToBinary[enemy.hex];
+            hintPopup.textContent = `${enemy.hex} = ${correctBinary}`;
+            
+            // 敵の右側に配置
+            hintPopup.style.left = (enemy.x + 60) + 'px';
+            hintPopup.style.top = (enemy.y + 10) + 'px';
+            
+            stage.appendChild(hintPopup);
+            
+            // 敵を震わせる
+            enemy.element.classList.add('shake');
+            
+            // 1秒後に削除
+            setTimeout(() => {
+                hintPopup.remove();
+                enemy.element.classList.remove('shake');
+            }, 1000);
+        }
+
+        // ========================================
+        // 画面表示の更新
+        // ========================================
+        function updateDisplay() {
+            scoreDisplay.textContent = gameState.score;
+            lifeDisplay.textContent = gameState.life;
+            difficultyDisplay.textContent = currentDifficultySettings.displayName;
+        }
+
+        // ========================================
+        // ゲームオーバー処理
+        // ========================================
+        function gameOver() {
+            gameState.isGameOver = true;
+            cancelAnimationFrame(gameLoopId);
+            
+            // ハイスコアをチェックして保存
+            const isNewRecord = saveHighScore(gameState.score);
+            
+            // スコアを表示
+            finalScoreDisplay.textContent = gameState.score;
+            finalHighScoreDisplay.textContent = gameState.highScore;
+            
+            // 新記録の場合は表示
+            if (isNewRecord) {
+                newRecordText.style.display = 'block';
+            } else {
+                newRecordText.style.display = 'none';
+            }
+            
+            gameOverScreen.style.display = 'block';
+        }
+
+        // ========================================
+        // ゲーム再スタート（タイトル画面に戻る）
+        // ========================================
+        function restartGame() {
+            showTitleScreen();
+        }
+
+        // ========================================
+        // ゲーム開始（タイトル画面を表示）
+        // ========================================
+        showTitleScreen();
+
+        // ========================================
+        // ボタンのイベントリスナーを設定（念のため）
+        // ========================================
+        document.getElementById('btn-0').addEventListener('click', function() {
+            pushBit('0');
+        });
+        
+        document.getElementById('btn-1').addEventListener('click', function() {
+            pushBit('1');
+        });
+        
+        document.getElementById('btn-reset').addEventListener('click', function() {
+            if (confirm('タイトル画面に戻りますか？')) {
+                showTitleScreen();
+            }
+        });
+
+        // ========================================
+        // キーボード入力対応
+        // ========================================
+        document.addEventListener('keydown', function(event) {
+            if (gameState.isGameOver) return;
+            
+            // 0キーまたはFキー → 0を入力
+            if (event.key === '0' || event.key.toLowerCase() === 'f') {
+                pushBit('0');
+                event.preventDefault();
+            }
+            // 1キーまたはJキー → 1を入力
+            else if (event.key === '1' || event.key.toLowerCase() === 'j') {
+                pushBit('1');
+                event.preventDefault();
+            }
+            // Backspaceキー → 入力をクリア
+            else if (event.key === 'Backspace') {
+                resetInput();
+                event.preventDefault();
+            }
+            // Escapeキー → タイトル画面に戻る
+            else if (event.key === 'Escape') {
+                if (confirm('タイトル画面に戻りますか？')) {
+                    showTitleScreen();
+                }
+                event.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>
