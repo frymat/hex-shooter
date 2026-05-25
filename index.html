@@ -1536,22 +1536,7 @@
         // ========================================
         showTitleScreen();
 
-        // ========================================
-        // ボタンのイベントリスナーを設定（念のため）
-        // ========================================
-        document.getElementById('btn-0').addEventListener('click', function() {
-            pushBit('0');
-        });
-        
-        document.getElementById('btn-1').addEventListener('click', function() {
-            pushBit('1');
-        });
-        
-        document.getElementById('btn-reset').addEventListener('click', function() {
-            if (confirm('タイトル画面に戻りますか？')) {
-                showTitleScreen();
-            }
-        });
+
 
         // ========================================
         // キーボード入力対応
