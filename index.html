@@ -1219,9 +1219,18 @@
             for (let i = gameState.bullets.length - 1; i >= 0; i--) {
                 const bullet = gameState.bullets[i];
                 
-                // 方向ベクトルに従って移動（ターゲットに向かって飛ぶ）
-                bullet.x += bullet.dirX * BULLET_SPEED;
-                bullet.y += bullet.dirY * BULLET_SPEED;
+               // ターゲットの現在位置を取得
+const targetX = bullet.targetEnemy.x + 25;
+const targetY = bullet.targetEnemy.y + 25;
+
+// 現在位置からターゲットへのベクトル
+const dx = targetX - bullet.x;
+const dy = targetY - bullet.y;
+const distance = Math.sqrt(dx * dx + dy * dy);
+
+// 毎フレーム方向を再計算して追尾
+bullet.x += (dx / distance) * BULLET_SPEED;
+bullet.y += (dy / distance) * BULLET_SPEED;
                 
                 bullet.element.style.left = bullet.x + 'px';
                 bullet.element.style.top = bullet.y + 'px';
@@ -1242,6 +1251,12 @@
             // 各弾について
             for (let i = gameState.bullets.length - 1; i >= 0; i--) {
                 const bullet = gameState.bullets[i];
+                
+                if (!gameState.enemies.includes(bullet.targetEnemy)) {
+    bullet.element.remove();
+    gameState.bullets.splice(i, 1);
+    continue;
+}
                 
                 // 弾の中心座標
                 const bulletCenterX = bullet.x + 15;
